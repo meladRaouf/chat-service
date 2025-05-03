@@ -1,0 +1,140 @@
+openapi: 3.0.0
+info:
+  title: Chat Service API (with Sender Names)
+  version: 1.5.0 # Increment version
+  description: API for a real-time chat service using MongoDB and WebSockets, including sender names and read status. Protected by JWT Bearer authentication.
+servers:
+  - url: http://localhost:3000/api
+    description: Development server
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    ChatGroup:
+      type: object
+      properties:
+        _id: { type: string, description: Unique ID for the chat group, example: '6636a1b2f4a4b5a6c7d8e9f0' }
+        contextApp: { type: string, description: Application context, example: 'ADVISORY_MARKETPLACE' }
+        contextEntityType: { type: string, description: Entity type within context, example: 'Project' }
+        contextEntityId: { type: string, description: ID of the entity, example: 'proj_abc_123' }
+        name: { type: string, nullable: true, description: Optional group name, example: 'Project Alpha Discussion' }
+        createdAt: { type: string, format: date-time, description: Creation timestamp, example: '2025-05-04T09:30:00.123Z' }
+
+    ChatMessage:
+      type: object
+      properties:
+        _id: { type: string, description: Unique ID for the message, example: '6636a2c3f4a4b5a6c7d8e9f1' }
+        chatGroupId: { type: string, description: ID of the ChatGroup, example: '6636a1b2f4a4b5a6c7d8e9f0' }
+        message: { type: string, nullable: true, description: Text content, example: 'Please review...' }
+        senderUserId: { type: string, description: Sender's User ID (from CRM), example: 'user_crm_id_111' }
+        senderName: { type: string, description: Sender's display name, example: 'Alice Smith' } # Added
+        senderCompanyId: { type: string, nullable: true, description: Sender's Company ID (from CRM), example: 'company_crm_id_222' }
+        senderCompanyName: { type: string, nullable: true, description: Sender's company display name, example: 'Acme Corp' } # Added
+        fileId: { type: string, nullable: true, description: Optional file ID, example: 'doc_service_id_xyz789' }
+        isRead: { type: boolean, description: Read status flag, example: false }
+        createdAt: { type: string, format: date-time, description: Creation timestamp, example: '2025-05-04T09:35:10.456Z' }
+
+    NewChatMessageInput:
+      type: object
+      required:
+        - contextApp
+        - contextEntityType
+        - contextEntityId
+        - senderUserId
+        - senderName # Make senderName required in input
+        # Either message or fileId must be provided (enforced by schema validation)
+      properties:
+        contextApp: { type: string, example: 'NFG_CLIENT_PORTAL' }
+        contextEntityType: { type: string, example: 'Account' }
+        contextEntityId: { type: string, example: 'acc_xyz_789' }
+        senderUserId: { type: string, description: Sender's User ID, example: 'user_crm_id_333' }
+        senderName: { type: string, description: Sender's display name, example: 'Bob Johnson' } # Added
+        senderCompanyId: { type: string, nullable: true, description: Optional Sender Company ID, example: 'company_crm_id_444' }
+        senderCompanyName: { type: string, nullable: true, description: Optional Sender Company Name, example: 'Beta Industries' } # Added
+        message: { type: string, description: Text content (required if no fileId), example: 'New message here.' }
+        fileId: { type: string, description: File ID (required if no message), example: 'doc_service_id_abc123' }
+        groupName: { type: string, nullable: true, description: Optional group name on creation, example: 'Client Account Chat' }
+
+    ErrorResponse:
+      type: object
+      properties:
+        success: { type: boolean, example: false }
+        message: { type: string, example: 'Missing required field: senderName' }
+        errors: { type: array, items: { type: string }, example: ["Either message or fileId must be provided."] }
+
+security:
+  - bearerAuth: []
+
+paths:
+  /messages:
+    post:
+      tags: [Messages]
+      summary: Create a new message
+      description: Creates a new chat message, including sender name details. Requires 'create_message' permission.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/NewChatMessageInput' } } } # Updated input schema
+      responses:
+        '201':
+          description: Message created successfully
+          content: { application/json: { schema: { type: object, properties: { success: { type: boolean }, data: { $ref: '#/components/schemas/ChatMessage' } } } } } # Updated response schema
+        '400': { description: Bad Request, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+        '401': { description: Unauthorized, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+        '403': { description: Forbidden, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+        '500': { description: Internal Server Error, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+        '503': { description: Service Unavailable, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+
+
+  /messages/{contextApp}/{contextEntityType}/{contextEntityId}:
+    get:
+      tags: [Messages]
+      summary: Get messages by context
+      description: Retrieves messages, including sender names. Requires 'list_messages' permission.
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: contextApp, in: path, required: true, schema: { type: string } }
+        - { name: contextEntityType, in: path, required: true, schema: { type: string } }
+        - { name: contextEntityId, in: path, required: true, schema: { type: string } }
+        - { name: page, in: query, schema: { type: integer, default: 1 } }
+        - { name: limit, in: query, schema: { type: integer, default: 20 } }
+      responses:
+        '200':
+          description: Successfully retrieved messages
+          content: { application/json: { schema: { type: object, properties: { success: { type: boolean }, chatGroupId: { type: string, nullable: true }, count: { type: integer }, totalMessages: { type: integer }, currentPage: { type: integer }, totalPages: { type: integer }, data: { type: array, items: { $ref: '#/components/schemas/ChatMessage' } } } } } } # Updated response schema
+        '400': { description: Bad Request, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+        '401': { description: Unauthorized, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+        '403': { description: Forbidden, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+        '500': { description: Internal Server Error, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+        '503': { description: Service Unavailable, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+
+  /messages/{messageId}/status:
+    patch:
+      tags: [Messages]
+      summary: Update message read status
+      description: Updates the `isRead` status. Requires 'change_status' permission.
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: messageId, in: path, required: true, schema: { type: string, format: objectId } }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, required: [isRead], properties: { isRead: { type: boolean } } } } }
+      responses:
+        '200':
+          description: Message status updated successfully
+          content: { application/json: { schema: { type: object, properties: { success: { type: boolean }, data: { $ref: '#/components/schemas/ChatMessage' } } } } } # Updated response schema
+        '400': { description: Bad Request, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+        '401': { description: Unauthorized, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+        '403': { description: Forbidden, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+        '404': { description: Not Found, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+        '500': { description: Internal Server Error, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+        '503': { description: Service Unavailable, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+

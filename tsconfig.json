@@ -1,0 +1,24 @@
+{
+  "compilerOptions": {
+    // --- Updated Target ---
+    "target": "ES2022", // Target JS version compatible with Node 18+ LTS
+
+    "module": "CommonJS", // Keep this for the main build output (tsc)
+    "outDir": "./dist",
+    "rootDir": "./src",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+    "moduleResolution": "node",
+    "sourceMap": true // Enable source maps for easier debugging
+  },
+  "include": ["src/**/*"],
+  "exclude": ["node_modules", "**/*.spec.ts", "test/**/*"],
+  // ts-node configuration for running .ts files directly (like the test client)
+  "ts-node": {
+    "esm": true, // Handle .ts files written with ES Module syntax
+    "experimentalSpecifierResolution": "node"
+  }
+}
